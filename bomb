@@ -1,0 +1,100 @@
+import tkinter as tk
+from PIL import ImageGrab
+from playsound import playsound
+import threading
+
+# Sound paths (make sure these are in the same folder)
+SOUND_PLANTED = "planted.mp3"
+SOUND_TOO_LATE = "toolate.mp3"
+SOUND_EXPLODE = "boom.mp3"
+
+# Spike timer window setup
+root = tk.Tk()
+root.title("Valorant Spike Timer")
+root.geometry("200x130")
+root.wm_attributes('-topmost', True)
+root.wm_attributes('-alpha', 0.01)  # Invisible at start
+
+# State
+running = False
+seconds = 45
+too_late_alerted = False
+
+# UI elements
+timer_display = tk.Label(root, text="", font=("Helvetica", 24))
+timer_display.pack(pady=5)
+
+cancel_button = tk.Button(root, text="Cancel Timer", command=lambda: cancel_timer())
+cancel_button.pack(pady=5)
+
+status_label = tk.Label(root, text="", font=("Helvetica", 10))
+status_label.pack()
+
+def play_sound(path):
+    threading.Thread(target=playsound, args=(path,), daemon=True).start()
+
+def cancel_timer():
+    global running
+    running = False
+    root.wm_attributes('-alpha', 0.01)
+    timer_display.config(text="")
+    status_label.config(text="Timer Canceled")
+
+def countdown(time_left):
+    global running, too_late_alerted
+    if time_left > 0 and running:
+        mins, secs = divmod(time_left, 60)
+
+        def color_change(t):
+            if t > 10:
+                return 'green'
+            elif 8 <= t <= 10:
+                return 'yellow'
+            else:
+                return 'red'
+
+        timer_display.config(text=f"{mins:02d}:{secs:02d}", fg=color_change(time_left))
+
+        if time_left == 7 and not too_late_alerted:
+            play_sound(SOUND_TOO_LATE)
+            too_late_alerted = True
+            status_label.config(text="⚠️ Too Late To Defuse!")
+
+        root.after(1000, countdown, time_left - 1)
+    else:
+        if running:
+            play_sound(SOUND_EXPLODE)
+            root.wm_attributes('-alpha', 0.01)
+            timer_display.config(text="")
+            status_label.config(text="💥 Spike Exploded")
+            search_color()
+
+def start_countdown():
+    global running, too_late_alerted
+    if not running:
+        running = True
+        too_late_alerted = False
+        root.wm_attributes('-alpha', 0.9)
+        play_sound(SOUND_PLANTED)
+        status_label.config(text="Spike Planted!")
+        countdown(seconds)
+
+def search_color():
+    screenshot = ImageGrab.grab()
+    step = 10
+    width, height = screenshot.size
+    red_shades = [(230, 0, 0), (170, 0, 0)]
+
+    for x in range(0, width, step):
+        for y in range(0, height, step):
+            pixel = screenshot.getpixel((x, y))
+            if pixel in red_shades:
+                print(f"Red Detected at ({x}, {y}) -> {pixel}")
+                start_countdown()
+                return
+
+    root.after(100, search_color)
+
+# Start scanning
+root.after(100, search_color)
+root.mainloop()
